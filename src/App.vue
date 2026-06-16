@@ -5,10 +5,59 @@ import ActionButtons from '@/components/ActionButtons.vue'
 import EventLog from '@/components/EventLog.vue'
 import GameOverModal from '@/components/GameOverModal.vue'
 import { useGame } from '@/composables/useGame'
+import type { ActionType, ResourceKey } from '@/types/game'
 
-const { state, highScore, canPerformAction, gatherWood, gatherStone, hunt, drink, restart } = useGame()
+const { state, highScore, getActionInsight, tryAction, restart } = useGame()
 
 const isNewRecord = computed(() => state.value.turn >= highScore.value && state.value.turn > 0)
+
+const allActionTypes: ActionType[] = ['gatherWood', 'gatherStone', 'hunt', 'drink']
+
+const insights = computed(() => {
+  const result = {} as Record<ActionType, ReturnType<typeof getActionInsight>>
+  for (const action of allActionTypes) {
+    result[action] = getActionInsight(action)
+  }
+  return result
+})
+
+const blockedResources = computed(() => {
+  const blocked = new Set<ResourceKey>()
+  for (const action of allActionTypes) {
+    const insight = insights.value[action]
+    if (!insight.canPerform) {
+      for (const blocker of insight.blockers) {
+        blocked.add(blocker.resource)
+      }
+    }
+  }
+  return blocked
+})
+
+const thresholds = computed(() => {
+  const result: Record<ResourceKey, number | undefined> = {
+    health: undefined,
+    hunger: undefined,
+    thirst: undefined,
+    wood: undefined,
+    stone: undefined,
+  }
+  for (const action of allActionTypes) {
+    const insight = insights.value[action]
+    if (!insight.canPerform) {
+      for (const blocker of insight.blockers) {
+        if (result[blocker.resource] === undefined || blocker.required > result[blocker.resource]!) {
+          result[blocker.resource] = blocker.required
+        }
+      }
+    }
+  }
+  return result
+})
+
+function handlePerformAction(action: ActionType) {
+  tryAction(action)
+}
 </script>
 
 <template>
@@ -45,20 +94,16 @@ const isNewRecord = computed(() => state.value.turn >= highScore.value && state.
             :thirst="state.thirst"
             :wood="state.wood"
             :stone="state.stone"
+            :blocked-resources="blockedResources"
+            :thresholds="thresholds"
           />
         </div>
 
         <div>
           <ActionButtons
-            :can-gather-wood="canPerformAction('gatherWood')"
-            :can-gather-stone="canPerformAction('gatherStone')"
-            :can-hunt="canPerformAction('hunt')"
-            :can-drink="canPerformAction('drink')"
+            :insights="insights"
             :disabled="state.isGameOver"
-            @gather-wood="gatherWood"
-            @gather-stone="gatherStone"
-            @hunt="hunt"
-            @drink="drink"
+            @perform-action="handlePerformAction"
           />
         </div>
 

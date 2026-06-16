@@ -12,7 +12,7 @@ export interface GameState {
 export interface LogEntry {
   id: number
   text: string
-  type: 'action' | 'event' | 'system' | 'good' | 'bad'
+  type: 'action' | 'event' | 'system' | 'good' | 'bad' | 'warning'
   turn: number
 }
 
@@ -31,10 +31,33 @@ export interface RandomEvent {
 
 export type ActionType = 'gatherWood' | 'gatherStone' | 'hunt' | 'drink'
 
+export type ResourceKey = 'health' | 'hunger' | 'thirst' | 'wood' | 'stone'
+
 export interface ActionEffect {
   health?: number
   hunger?: number
   thirst?: number
   wood?: number
   stone?: number
+}
+
+export interface ActionBlocker {
+  resource: ResourceKey
+  label: string
+  icon: string
+  current: number
+  required: number
+  gap: number
+}
+
+export interface ActionRemediation {
+  action: ActionType
+  label: string
+  icon: string
+}
+
+export interface ActionInsight {
+  canPerform: boolean
+  blockers: ActionBlocker[]
+  remediation: ActionRemediation | null
 }

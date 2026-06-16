@@ -1,5 +1,5 @@
 import { ref, computed, watch } from 'vue'
-import type { GameState, LogEntry, RandomEvent, ActionType, ActionEffect } from '@/types/game'
+import type { GameState, LogEntry, RandomEvent, ActionType, ActionEffect, ActionInsight, ActionBlocker, ActionRemediation, ResourceKey } from '@/types/game'
 import { randomEvents } from '@/data/events'
 
 const STORAGE_KEY_HIGH_SCORE = 'survival_game_high_score'
@@ -21,6 +21,37 @@ const actionNames: Record<ActionType, string> = {
   gatherStone: '采集石头',
   hunt: '打猎',
   drink: '喝水',
+}
+
+const actionIcons: Record<ActionType, string> = {
+  gatherWood: '🪵',
+  gatherStone: '🪨',
+  hunt: '🏹',
+  drink: '💧',
+}
+
+const resourceLabels: Record<ResourceKey, string> = {
+  health: '生命值',
+  hunger: '饥饿值',
+  thirst: '口渴值',
+  wood: '木材',
+  stone: '石头',
+}
+
+const resourceIcons: Record<ResourceKey, string> = {
+  health: '❤️',
+  hunger: '🍖',
+  thirst: '💧',
+  wood: '🪵',
+  stone: '🪨',
+}
+
+const resourceRemediation: Record<ResourceKey, ActionType> = {
+  wood: 'gatherWood',
+  stone: 'gatherStone',
+  health: 'gatherWood',
+  hunger: 'hunt',
+  thirst: 'drink',
 }
 
 export function useGame() {
@@ -121,6 +152,73 @@ export function useGame() {
     return true
   }
 
+  function getActionInsight(action: ActionType): ActionInsight {
+    if (state.value.isGameOver) {
+      return { canPerform: false, blockers: [], remediation: null }
+    }
+
+    const effects = actionEffects[action]
+    const blockers: ActionBlocker[] = []
+
+    const resourceChecks: { key: ResourceKey; effectKey: keyof ActionEffect }[] = [
+      { key: 'wood', effectKey: 'wood' },
+      { key: 'stone', effectKey: 'stone' },
+    ]
+
+    for (const { key, effectKey } of resourceChecks) {
+      const delta = effects[effectKey]
+      if (delta !== undefined && delta < 0) {
+        const current = state.value[key]
+        const required = Math.abs(delta)
+        if (current < required) {
+          blockers.push({
+            resource: key,
+            label: resourceLabels[key],
+            icon: resourceIcons[key],
+            current,
+            required,
+            gap: required - current,
+          })
+        }
+      }
+    }
+
+    let remediation: ActionRemediation | null = null
+    if (blockers.length > 0) {
+      const primaryBlocker = blockers[0]
+      const remedyAction = resourceRemediation[primaryBlocker.resource]
+      remediation = {
+        action: remedyAction,
+        label: actionNames[remedyAction],
+        icon: actionIcons[remedyAction],
+      }
+    }
+
+    return {
+      canPerform: blockers.length === 0,
+      blockers,
+      remediation,
+    }
+  }
+
+  function tryAction(action: ActionType): boolean {
+    if (canPerformAction(action)) {
+      performAction(action)
+      return true
+    }
+    const insight = getActionInsight(action)
+    if (insight.blockers.length > 0) {
+      const blockerDescs = insight.blockers.map(
+        b => `${b.label}不足（${b.current}/${b.required}，差${b.gap}）`
+      )
+      const remedyText = insight.remediation
+        ? `，建议：${insight.remediation.label}`
+        : ''
+      addLog(`无法${actionNames[action]}——${blockerDescs.join('，')}${remedyText}`, 'warning')
+    }
+    return false
+  }
+
   function performAction(action: ActionType) {
     if (!canPerformAction(action)) return
 
@@ -178,6 +276,8 @@ export function useGame() {
     highScore,
     canAct,
     canPerformAction,
+    getActionInsight,
+    tryAction,
     gatherWood,
     gatherStone,
     hunt,

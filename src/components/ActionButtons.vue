@@ -1,29 +1,24 @@
 <script setup lang="ts">
+import type { ActionInsight, ActionType } from '@/types/game'
+
 interface ActionButton {
   label: string
   icon: string
   description: string
-  action: () => void
-  disabled: boolean
+  actionType: ActionType
   bgClass: string
   hoverClass: string
 }
 
 interface Props {
-  canGatherWood: boolean
-  canGatherStone: boolean
-  canHunt: boolean
-  canDrink: boolean
+  insights: Record<ActionType, ActionInsight>
   disabled: boolean
 }
 
 const props = defineProps<Props>()
 
 const emit = defineEmits<{
-  gatherWood: []
-  gatherStone: []
-  hunt: []
-  drink: []
+  performAction: [action: ActionType]
 }>()
 
 const buttons: ActionButton[] = [
@@ -31,8 +26,7 @@ const buttons: ActionButton[] = [
     label: '采集木头',
     icon: '🪵',
     description: '获得木材，消耗体力',
-    action: () => emit('gatherWood'),
-    disabled: false,
+    actionType: 'gatherWood',
     bgClass: 'bg-amber-900/40',
     hoverClass: 'hover:bg-amber-800/60',
   },
@@ -40,8 +34,7 @@ const buttons: ActionButton[] = [
     label: '采集石头',
     icon: '🪨',
     description: '获得石头，消耗体力',
-    action: () => emit('gatherStone'),
-    disabled: false,
+    actionType: 'gatherStone',
     bgClass: 'bg-gray-700/40',
     hoverClass: 'hover:bg-gray-600/60',
   },
@@ -49,8 +42,7 @@ const buttons: ActionButton[] = [
     label: '打猎',
     icon: '🏹',
     description: '回复生命，增加饥饿，消耗木材',
-    action: () => emit('hunt'),
-    disabled: false,
+    actionType: 'hunt',
     bgClass: 'bg-red-900/40',
     hoverClass: 'hover:bg-red-800/60',
   },
@@ -58,12 +50,15 @@ const buttons: ActionButton[] = [
     label: '喝水',
     icon: '💧',
     description: '减少口渴，消耗木材烧水',
-    action: () => emit('drink'),
-    disabled: false,
+    actionType: 'drink',
     bgClass: 'bg-blue-900/40',
     hoverClass: 'hover:bg-blue-800/60',
   },
 ]
+
+function handleClick(actionType: ActionType) {
+  emit('performAction', actionType)
+}
 </script>
 
 <template>
@@ -73,24 +68,57 @@ const buttons: ActionButton[] = [
       <span>行动</span>
     </h2>
     <div class="grid grid-cols-2 gap-3">
-      <button
-        v-for="(btn, index) in buttons"
+      <div
+        v-for="btn in buttons"
         :key="btn.label"
-        @click="btn.action"
-        :disabled="disabled || (index === 0 ? !canGatherWood : index === 1 ? !canGatherStone : index === 2 ? !canHunt : !canDrink)"
-        :class="[
-          btn.bgClass,
-          'relative p-4 rounded-xl border border-game-border transition-all duration-200',
-          'flex flex-col items-center justify-center gap-2 text-center',
-          disabled || (index === 0 ? !canGatherWood : index === 1 ? !canGatherStone : index === 2 ? !canHunt : !canDrink)
-            ? 'opacity-40 cursor-not-allowed'
-            : [btn.hoverClass, 'hover:scale-[1.02] hover:shadow-lg cursor-pointer active:scale-[0.98]'],
-        ]"
+        class="relative"
       >
-        <span class="text-3xl">{{ btn.icon }}</span>
-        <span class="text-white font-semibold text-sm">{{ btn.label }}</span>
-        <span class="text-gray-400 text-xs">{{ btn.description }}</span>
-      </button>
+        <button
+          @click="handleClick(btn.actionType)"
+          :disabled="disabled || !props.insights[btn.actionType].canPerform"
+          :class="[
+            btn.bgClass,
+            'w-full p-4 rounded-xl border transition-all duration-200',
+            'flex flex-col items-center justify-center gap-2 text-center',
+            disabled || !props.insights[btn.actionType].canPerform
+              ? 'opacity-40 cursor-not-allowed border-game-border'
+              : [btn.hoverClass, 'hover:scale-[1.02] hover:shadow-lg cursor-pointer active:scale-[0.98] border-game-border'],
+          ]"
+        >
+          <span class="text-3xl">{{ btn.icon }}</span>
+          <span class="text-white font-semibold text-sm">{{ btn.label }}</span>
+          <span class="text-gray-400 text-xs">{{ btn.description }}</span>
+        </button>
+
+        <div
+          v-if="!disabled && !props.insights[btn.actionType].canPerform && props.insights[btn.actionType].blockers.length > 0"
+          class="mt-2 bg-red-950/50 border border-red-800/40 rounded-lg p-2.5 animate-slide-up"
+        >
+          <div
+            v-for="blocker in props.insights[btn.actionType].blockers"
+            :key="blocker.resource"
+            class="flex items-center justify-between text-xs mb-1 last:mb-0"
+          >
+            <span class="text-red-300 flex items-center gap-1">
+              <span>{{ blocker.icon }}</span>
+              <span>{{ blocker.label }}</span>
+            </span>
+            <span class="text-red-400 font-mono">
+              {{ blocker.current }}/{{ blocker.required }}
+              <span class="text-red-300 ml-0.5">差{{ blocker.gap }}</span>
+            </span>
+          </div>
+
+          <button
+            v-if="props.insights[btn.actionType].remediation"
+            @click="handleClick(props.insights[btn.actionType].remediation!.action)"
+            class="mt-2 w-full py-1.5 px-3 bg-amber-800/50 hover:bg-amber-700/60 border border-amber-700/40 rounded-md text-amber-200 text-xs font-medium transition-all duration-150 flex items-center justify-center gap-1 cursor-pointer"
+          >
+            <span>{{ props.insights[btn.actionType].remediation!.icon }}</span>
+            <span>去{{ props.insights[btn.actionType].remediation!.label }}</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
